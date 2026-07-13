@@ -1,6 +1,8 @@
 """
-数据可视化模块
-生成压力相关的各类图表
+数据可视化模块（重构版）
+
+所有图表统一通过 apply_plotly_theme() / apply_matplotlib_theme() 应用主题，
+绘图函数只接收 Theme 对象，不再各自判断 dark / light，整体减少大量重复代码。
 """
 
 import numpy as np
@@ -9,26 +11,57 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+
+from theme import DARK, Theme
 
 # 设置中文字体
 plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS"]
 plt.rcParams["axes.unicode_minus"] = False
 
 
-def plot_pressure_wave(pressure_values: list, days: list = None, color: str = "#E8928C"):
+# ============ 主题应用 ============
+def apply_plotly_theme(fig, theme: Theme):
+    """统一应用 Plotly 主题。"""
+    fig.update_layout(
+        template=theme.plotly_template,
+        paper_bgcolor=theme.paper_bg,
+        plot_bgcolor=theme.plot_bg,
+        font=dict(color=theme.text),
+    )
+    return fig
+
+
+def apply_matplotlib_theme(fig, ax, theme: Theme):
     """
-    生成压力波段曲线图
+    统一应用 Matplotlib 主题，返回文字相关颜色元组：
+    (title, label, tick, grid, spine, leg_fg, leg_ec, leg_lc)
     """
+    if theme.name == "dark":
+        fig_bg, ax_bg = theme.bg, "#1C1C24"
+        colors = ("#F2F2F5", "#E6E6EA", "#E6E6EA", "#555", "#444",
+                  "#1C1C24", "#444", "#E6E6EA")
+    else:
+        fig_bg, ax_bg = theme.bg, "#F7F8FA"
+        colors = ("#1A1A1F", "#2C2C34", "#2C2C34", "#CCCCCC", "#DDDDDD",
+                  "#F7F8FA", "#DDDDDD", "#2C2C34")
+    fig.patch.set_facecolor(fig_bg)
+    ax.set_facecolor(ax_bg)
+    return colors
+
+
+# ============ 各图表 ============
+def plot_pressure_wave(pressure_values: list, days: list = None,
+                       color: str = "#E8928C", theme: Theme = DARK):
+    """生成压力波段曲线图（Matplotlib）。"""
     if days is None:
         days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    fig.patch.set_facecolor("#14141A")
-    ax.set_facecolor("#1C1C24")
+    (title_c, label_c, tick_c, grid_c, spine_c,
+     leg_fg, leg_ec, leg_lc) = apply_matplotlib_theme(fig, ax, theme)
 
-    # 渐变填充
-    ax.plot(days, pressure_values, marker="o", linewidth=3, color=color, markersize=8, zorder=5)
+    ax.plot(days, pressure_values, marker="o", linewidth=3, color=color,
+            markersize=8, zorder=5)
     ax.fill_between(days, pressure_values, alpha=0.25, color=color)
 
     # 压力区间背景（柔和色）
@@ -37,28 +70,28 @@ def plot_pressure_wave(pressure_values: list, days: list = None, color: str = "#
     ax.axhspan(60, 85, alpha=0.10, color="#E8928C", label="高压")
     ax.axhspan(85, 100, alpha=0.10, color="#B18BC9", label="超负荷")
 
-    # 标注每个点的数值
     for i, v in enumerate(pressure_values):
         ax.annotate(f"{v:.0f}", (days[i], v), textcoords="offset points",
-                    xytext=(0, 12), ha="center", fontsize=11, fontweight="bold", color=color)
+                    xytext=(0, 12), ha="center", fontsize=11,
+                    fontweight="bold", color=color)
 
-    ax.set_title("📊 一周压力波段曲线", fontsize=18, fontweight="bold", pad=15, color="#F2F2F5")
-    ax.set_ylabel("压力指数", fontsize=13, color="#E6E6EA")
+    ax.set_title("📊 一周压力波段曲线", fontsize=18, fontweight="bold",
+                 pad=15, color=title_c)
+    ax.set_ylabel("压力指数", fontsize=13, color=label_c)
     ax.set_ylim(0, 105)
-    ax.tick_params(colors="#E6E6EA")
-    ax.grid(True, alpha=0.15, linestyle="--", color="#555")
+    ax.tick_params(colors=tick_c)
+    ax.grid(True, alpha=0.15, linestyle="--", color=grid_c)
     for spine in ax.spines.values():
-        spine.set_color("#444")
-    ax.legend(loc="upper right", fontsize=9, facecolor="#1C1C24",
-              edgecolor="#444", labelcolor="#E6E6EA")
+        spine.set_color(spine_c)
+    ax.legend(loc="upper right", fontsize=9, facecolor=leg_fg,
+              edgecolor=leg_ec, labelcolor=leg_lc)
     plt.tight_layout()
     return fig
 
 
-def plot_pressure_source_pie(study: float, physical: float, social: float):
-    """
-    生成压力来源饼图（Plotly交互式）
-    """
+def plot_pressure_source_pie(study: float, physical: float, social: float,
+                             theme: Theme = DARK):
+    """生成压力来源饼图（Plotly 交互式）。"""
     fig = go.Figure(data=[go.Pie(
         labels=["学习压力", "生理状态", "社交反馈"],
         values=[study, physical, social],
@@ -72,19 +105,12 @@ def plot_pressure_source_pie(study: float, physical: float, social: float):
         title=dict(text="🎯 压力来源分布", font=dict(size=18)),
         showlegend=True,
         height=400,
-        template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#E6E6EA"),
     )
-    return fig
+    return apply_plotly_theme(fig, theme)
 
 
-def plot_group_comparison(data: pd.DataFrame):
-    """
-    生成群体对比柱状图
-    data 需包含列: group, study, physical, social
-    """
+def plot_group_comparison(data: pd.DataFrame, theme: Theme = DARK):
+    """生成群体对比柱状图。data 需包含列: group, study, physical, social。"""
     fig = go.Figure()
     categories = ["学习压力", "生理状态", "社交反馈"]
     colors = ["#E8928C", "#6FCFC4", "#E0C068"]
@@ -104,19 +130,13 @@ def plot_group_comparison(data: pd.DataFrame):
         title=dict(text="📊 不同群体压力对比", font=dict(size=18)),
         yaxis=dict(title="压力指数", range=[0, 100]),
         height=400,
-        template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#E6E6EA"),
     )
-    return fig
+    return apply_plotly_theme(fig, theme)
 
 
-def plot_sankey(study: float, physical: float, social: float, total: float):
-    """
-    生成能量消耗桑基图（Sankey Diagram）
-    展示压力如何从不同来源汇聚
-    """
+def plot_sankey(study: float, physical: float, social: float, total: float,
+                theme: Theme = DARK):
+    """生成能量消耗桑基图（Sankey Diagram）。"""
     fig = go.Figure(data=[go.Sankey(
         node=dict(
             pad=20,
@@ -143,18 +163,12 @@ def plot_sankey(study: float, physical: float, social: float, total: float):
     fig.update_layout(
         title=dict(text="🔄 压力能量流向图", font=dict(size=18)),
         height=450,
-        template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#E6E6EA"),
     )
-    return fig
+    return apply_plotly_theme(fig, theme)
 
 
-def plot_pressure_trend(diary_data: list):
-    """
-    生成情绪日记趋势图
-    diary_data: [{"date": "7/1", "score": 65}, ...]
-    """
+def plot_pressure_trend(diary_data: list, theme: Theme = DARK):
+    """生成情绪日记趋势图。diary_data: [{"date": "7/1", "score": 65}, ...]"""
     if not diary_data:
         return None
 
@@ -180,16 +194,12 @@ def plot_pressure_trend(diary_data: list):
         title=dict(text="📅 情绪日记趋势", font=dict(size=18)),
         yaxis=dict(title="压力指数", range=[0, 100]),
         height=350,
-        template="plotly_dark",
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#E6E6EA"),
     )
-    return fig
+    return apply_plotly_theme(fig, theme)
 
 
 def generate_sample_weekly_data(base_score: float = 50) -> list:
-    """根据基准压力分生成一周模拟数据"""
+    """根据基准压力分生成一周模拟数据。"""
     np.random.seed(42)
     # 模拟典型中学生一周：周一低，逐渐升高，周五高峰，周末回落
     pattern = [0.85, 0.95, 1.0, 1.1, 1.2, 0.65, 0.55]
