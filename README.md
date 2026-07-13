@@ -75,3 +75,4 @@ streamlit run app.py
 | 超负荷 | 86-100 | 🔴 紫色 | 深度疗愈 |
 
 
+
