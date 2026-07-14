@@ -15,25 +15,42 @@ Streamlit 主应用（重构版）
 import numpy as np
 import pandas as pd
 import streamlit as st
-
-from theme import get_theme, render_theme_style
-from ui import (
-    STUDY_COLOR, PHYS_COLOR, SOCIAL_COLOR,
-    main_title, subtitle, score_display, hotline_box, card,
-    recommendation_box, breath_guide, color_psychology_item, footer,
-)
-from visualization import (
-    generate_sample_weekly_data, plot_pressure_wave,
-    plot_pressure_source_pie, plot_group_comparison, plot_sankey, plot_pressure_trend,
+from color_mapping import PRESSURE_COLOR_MAP, get_breath_animation_params
+from data_utils import (
+    clear_diary,
+    load_diary,
+    load_sample_data,
+    save_diary_entry,
+    seed_sample_diary,
 )
 from pressure_model import (
-    calculate_pressure_score, get_pressure_level, quick_pressure_score,
+    calculate_pressure_score,
+    get_pressure_level,
+    quick_pressure_score,
 )
-from data_utils import (
-    clear_diary, load_diary, load_sample_data,
-    save_diary_entry, seed_sample_diary,
+from theme import get_theme, render_theme_style
+from ui import (
+    PHYS_COLOR,
+    SOCIAL_COLOR,
+    STUDY_COLOR,
+    breath_guide,
+    card,
+    color_psychology_item,
+    footer,
+    hotline_box,
+    main_title,
+    recommendation_box,
+    score_display,
+    subtitle,
 )
-from color_mapping import PRESSURE_COLOR_MAP, get_breath_animation_params
+from visualization import (
+    generate_sample_weekly_data,
+    plot_group_comparison,
+    plot_pressure_source_pie,
+    plot_pressure_trend,
+    plot_pressure_wave,
+    plot_sankey,
+)
 
 
 # ============ 侧边栏：压力自测 ============
@@ -68,14 +85,23 @@ def render_sidebar():
         st.sidebar.markdown("#### 👥 社交反馈")
         conflict = st.sidebar.slider("同伴冲突次数", 0.0, 5.0, 1.0, 0.5)
         criticism = st.sidebar.slider("家长批评频率（1-5）", 1.0, 5.0, 2.0, 0.5)
-        social_media = st.sidebar.slider("社交媒体使用时长（小时/天）", 0.0, 8.0, 2.0, 0.5)
+        social_media = st.sidebar.slider(
+            "社交媒体使用时长（小时/天）", 0.0, 8.0, 2.0, 0.5
+        )
         loneliness = st.sidebar.slider("孤独感评分（1-10）", 1.0, 10.0, 3.0, 0.5)
 
         result = calculate_pressure_score(
-            homework_hours=homework, exam_frequency=exam_freq, grade_variance=grade_var,
-            tutoring_count=tutoring, sleep_hours=sleep_h, sleep_quality=sleep_q,
-            exercise_freq=exercise, conflict_count=conflict, parent_criticism=criticism,
-            social_media_hours=social_media, loneliness_score=loneliness,
+            homework_hours=homework,
+            exam_frequency=exam_freq,
+            grade_variance=grade_var,
+            tutoring_count=tutoring,
+            sleep_hours=sleep_h,
+            sleep_quality=sleep_q,
+            exercise_freq=exercise,
+            conflict_count=conflict,
+            parent_criticism=criticism,
+            social_media_hours=social_media,
+            loneliness_score=loneliness,
         )
 
     score = result["total_score"]
@@ -90,17 +116,35 @@ def render_dashboard(result, score, level_info, color, theme):
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(
-            card("学习压力", result.get("study_pressure", "N/A"), color, theme, STUDY_COLOR),
+            card(
+                "学习压力",
+                result.get("study_pressure", "N/A"),
+                color,
+                theme,
+                STUDY_COLOR,
+            ),
             unsafe_allow_html=True,
         )
     with col2:
         st.markdown(
-            card("生理状态", result.get("physical_state", "N/A"), color, theme, PHYS_COLOR),
+            card(
+                "生理状态",
+                result.get("physical_state", "N/A"),
+                color,
+                theme,
+                PHYS_COLOR,
+            ),
             unsafe_allow_html=True,
         )
     with col3:
         st.markdown(
-            card("社交反馈", result.get("social_feedback", "N/A"), color, theme, SOCIAL_COLOR),
+            card(
+                "社交反馈",
+                result.get("social_feedback", "N/A"),
+                color,
+                theme,
+                SOCIAL_COLOR,
+            ),
             unsafe_allow_html=True,
         )
 
@@ -146,36 +190,59 @@ def render_analysis(theme):
     group_data = []
     for grade in ["初一", "初二", "初三"]:
         subset = df[df["grade"] == grade]
-        scores = [calculate_pressure_score(**_row_kwargs(row)) for _, row in subset.iterrows()]
+        scores = [
+            calculate_pressure_score(**_row_kwargs(row)) for _, row in subset.iterrows()
+        ]
         if scores:
             group_data.append(_avg_group(grade, scores))
     group_df = pd.DataFrame(group_data)
-    st.plotly_chart(plot_group_comparison(group_df, theme=theme), use_container_width=True)
+    st.plotly_chart(
+        plot_group_comparison(group_df, theme=theme), use_container_width=True
+    )
 
     # 性别对比
     st.markdown("#### 不同性别压力对比")
     gender_data = []
     for gender in ["男", "女"]:
         subset = df[df["gender"] == gender]
-        scores = [calculate_pressure_score(**_row_kwargs(row)) for _, row in subset.iterrows()]
+        scores = [
+            calculate_pressure_score(**_row_kwargs(row)) for _, row in subset.iterrows()
+        ]
         if scores:
             gender_data.append(_avg_group(gender, scores))
     gender_df = pd.DataFrame(gender_data)
-    st.plotly_chart(plot_group_comparison(gender_df, theme=theme), use_container_width=True)
+    st.plotly_chart(
+        plot_group_comparison(gender_df, theme=theme), use_container_width=True
+    )
 
     # 桑基图
     st.markdown("#### 🔄 压力能量流向图")
     avg_study = np.mean(
-        [calculate_pressure_score(**_row_kwargs(row))["study_pressure"] for _, row in df.iterrows()]
+        [
+            calculate_pressure_score(**_row_kwargs(row))["study_pressure"]
+            for _, row in df.iterrows()
+        ]
     )
     avg_phys = np.mean(
-        [calculate_pressure_score(**_row_kwargs(row))["physical_state"] for _, row in df.iterrows()]
+        [
+            calculate_pressure_score(**_row_kwargs(row))["physical_state"]
+            for _, row in df.iterrows()
+        ]
     )
     avg_social = np.mean(
-        [calculate_pressure_score(**_row_kwargs(row))["social_feedback"] for _, row in df.iterrows()]
+        [
+            calculate_pressure_score(**_row_kwargs(row))["social_feedback"]
+            for _, row in df.iterrows()
+        ]
     )
     st.plotly_chart(
-        plot_sankey(avg_study, avg_phys, avg_social, avg_study + avg_phys + avg_social, theme=theme),
+        plot_sankey(
+            avg_study,
+            avg_phys,
+            avg_social,
+            avg_study + avg_phys + avg_social,
+            theme=theme,
+        ),
         use_container_width=True,
     )
 
@@ -191,7 +258,9 @@ def render_diary(score, theme):
 
     if st.button("✨ 载入示例日记（演示用）"):
         seeded = seed_sample_diary()
-        st.success("✅ 已载入两周示例日记！" if seeded else "示例日记已存在，未重复载入。")
+        st.success(
+            "✅ 已载入两周示例日记！" if seeded else "示例日记已存在，未重复载入。"
+        )
         st.rerun()
 
     col_a, col_b, col_c = st.columns(3)
@@ -242,7 +311,9 @@ def render_recommendation(score, level_info, color, theme):
     # 色彩心理学
     st.markdown("#### 🎨 色彩心理学解读")
     for level_name, info in PRESSURE_COLOR_MAP.items():
-        st.markdown(color_psychology_item(level_name, info, theme), unsafe_allow_html=True)
+        st.markdown(
+            color_psychology_item(level_name, info, theme), unsafe_allow_html=True
+        )
 
     st.markdown("""
 > 💚 **温馨提示**：本工具仅用于压力自测和情绪记录，**不能替代专业心理诊断**。
@@ -253,7 +324,7 @@ def render_recommendation(score, level_info, color, theme):
 # ============ 主程序 ============
 def main():
     st.set_page_config(
-        page_title="情绪避风港",
+        page_title="净化",
         page_icon="🌈",
         layout="wide",
         initial_sidebar_state="expanded",
@@ -261,7 +332,8 @@ def main():
 
     # 主题切换（侧边栏最上方）
     _choice = st.sidebar.radio(
-        "🎨 界面主题", ["🌙 深色", "☀️ 浅色"],
+        "🎨 界面主题",
+        ["🌙 深色", "☀️ 浅色"],
         index=0 if st.session_state.get("theme", "dark") == "dark" else 1,
         horizontal=True,
     )
