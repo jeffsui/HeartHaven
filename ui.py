@@ -105,7 +105,7 @@ def footer(theme: Theme) -> str:
     """页脚。"""
     return f"""
 <div style="text-align: center; color: {theme.footer}; font-size: 0.85rem; padding: 10px;">
-    🌈 情绪避风港 — 青少年情绪可视化实验室<br>
+    🌈 净化 — 青少年情绪可视化实验室<br>
     压力不是弱点，而是需要被理解的信号
 </div>
 """
