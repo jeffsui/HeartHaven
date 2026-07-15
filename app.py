@@ -225,35 +225,35 @@ def render_analysis(theme):
     )
 
     # 桑基图
-    st.markdown("#### 🔄 压力能量流向图")
-    avg_study = np.mean(
-        [
-            calculate_pressure_score(**_row_kwargs(row))["study_pressure"]
-            for _, row in df.iterrows()
-        ]
-    )
-    avg_phys = np.mean(
-        [
-            calculate_pressure_score(**_row_kwargs(row))["physical_state"]
-            for _, row in df.iterrows()
-        ]
-    )
-    avg_social = np.mean(
-        [
-            calculate_pressure_score(**_row_kwargs(row))["social_feedback"]
-            for _, row in df.iterrows()
-        ]
-    )
-    st.plotly_chart(
-        plot_sankey(
-            avg_study,
-            avg_phys,
-            avg_social,
-            avg_study + avg_phys + avg_social,
-            theme=theme,
-        ),
-        use_container_width=True,
-    )
+    # st.markdown("#### 🔄 压力能量流向图")
+    # avg_study = np.mean(
+    #     [
+    #         calculate_pressure_score(**_row_kwargs(row))["study_pressure"]
+    #         for _, row in df.iterrows()
+    #     ]
+    # )
+    # avg_phys = np.mean(
+    #     [
+    #         calculate_pressure_score(**_row_kwargs(row))["physical_state"]
+    #         for _, row in df.iterrows()
+    #     ]
+    # )
+    # avg_social = np.mean(
+    #     [
+    #         calculate_pressure_score(**_row_kwargs(row))["social_feedback"]
+    #         for _, row in df.iterrows()
+    #     ]
+    # )
+    # st.plotly_chart(
+    #     plot_sankey(
+    #         avg_study,
+    #         avg_phys,
+    #         avg_social,
+    #         avg_study + avg_phys + avg_social,
+    #         theme=theme,
+    #     ),
+    #     use_container_width=True,
+    # )
 
     # 原始数据
     with st.expander("📋 查看原始数据"):
