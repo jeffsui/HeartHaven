@@ -7,6 +7,8 @@ UI 组件模块
 """
 
 from theme import Theme
+from solutions import SOLUTION_LIBRARY
+from music_library import search_url
 
 # 三大压力维度品牌色（与主题无关，恒定）
 STUDY_COLOR = "#E8928C"  # 学习压力 · 柔珊瑚
@@ -108,4 +110,94 @@ def footer(theme: Theme) -> str:
     🌈 净化 — 青少年情绪可视化实验室<br>
     压力不是弱点，而是需要被理解的信号
 </div>
+"""
+
+
+def solution_card(sol_key: str, theme: Theme) -> str:
+    """欢迎页推荐解法卡片（emoji + 标题 + 描述 + 顶部色条），深浅模式自适应。"""
+    info = SOLUTION_LIBRARY.get(
+        sol_key, {"emoji": "💡", "title": sol_key, "desc": "", "color": "#6FCFC4"}
+    )
+    color = info["color"]
+    return f"""
+<div style="background:{theme.card}; border:1px solid {theme.border}; border-top:4px solid {color};
+            border-radius:12px; padding:18px; text-align:center; height:100%;">
+    <div style="font-size:2rem;">{info['emoji']}</div>
+    <div style="font-weight:700; color:{theme.title}; margin:6px 0;">{info['title']}</div>
+    <div style="font-size:0.85rem; color:{theme.sub};">{info['desc']}</div>
+</div>
+"""
+
+
+def ai_comfort_box(comfort: str, color: str, theme: Theme) -> str:
+    """AI 想对你说：共情安慰框，左侧用 AI 生成的情绪色。"""
+    return f"""
+<div style="background: {color}1A; border-left: 4px solid {color}; border-radius: 12px; padding: 20px; margin: 10px 0;">
+    <div style="font-size: 1.05rem; font-weight: 700; color: {color}; margin-bottom: 8px;">💙 AI想对你说</div>
+    <p style="color: {theme.text}; font-size: 1rem; line-height: 1.8; white-space: pre-line; margin: 0;">{comfort}</p>
+</div>
+"""
+
+
+def music_card(music: dict, theme: Theme) -> str:
+    """推荐歌曲卡片（歌名 / 歌手 / 推荐原因）。"""
+    return f"""
+<div style="background: {theme.card}; border: 1px solid {theme.border}; border-radius: 12px; padding: 18px;">
+    <div style="font-weight: 700; color: {theme.title}; font-size: 1.05rem; margin-bottom: 6px;">🎵 推荐歌曲</div>
+    <div style="margin: 6px 0;">
+        <strong style="color: {theme.title}; font-size: 1.15rem;">{music.get('name', '')}</strong>
+        <span style="color: {theme.sub};"> — {music.get('artist', '')}</span>
+    </div>
+    <div style="font-size: 0.9rem; color: {theme.sub};">推荐原因：{music.get('reason', '')}</div>
+</div>
+"""
+
+
+def meditation_card(text: str, theme: Theme) -> str:
+    """冥想引导卡片。"""
+    return f"""
+<div style="background: {theme.card}; border: 1px solid {theme.border}; border-radius: 12px; padding: 18px; margin: 10px 0;">
+    <div style="font-weight: 700; color: {theme.title}; font-size: 1.05rem; margin-bottom: 6px;">🧘 冥想</div>
+    <p style="color: {theme.sub}; font-size: 0.95rem; margin: 0;">{text}</p>
+</div>
+"""
+
+
+def emotion_gradient(color: str, theme: Theme, animate: bool = True) -> str:
+    """注入情绪渐变 CSS：背景过渡到 AI 生成的情绪色，呼吸圆圈也跟随。
+
+    animate=True 时播放 2.5s 渐变动画（首次进入陪伴页）；
+    animate=False 时直接静态着色（避免后续交互重播闪烁）。
+    """
+    if animate:
+        body = f"""
+@keyframes emotionFade {{
+    from {{ background-color: {theme.bg}; }}
+    to {{ background-color: {color}; }}
+}}
+html, body, .stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"],
+.block-container {{
+    animation: emotionFade 2.5s ease forwards !important;
+}}"""
+    else:
+        body = f"""
+html, body, .stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"],
+.block-container {{
+    background-color: {color} !important;
+    background: {color} !important;
+}}"""
+    return f"""
+<style>
+{body}
+.breath-circle {{
+    background: {color} !important;
+    transition: background 2.5s ease !important;
+}}
+</style>
 """

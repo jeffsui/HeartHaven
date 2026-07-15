@@ -12,9 +12,12 @@ Streamlit 主应用（重构版）
       └─ render_recommendation() 个性化减压方案
 """
 
+import time
+
 import numpy as np
 import pandas as pd
 import streamlit as st
+from ai_companion import PROVIDERS, generate_companion
 from color_mapping import PRESSURE_COLOR_MAP, get_breath_animation_params
 from data_utils import (
     clear_diary,
@@ -23,6 +26,7 @@ from data_utils import (
     save_diary_entry,
     seed_sample_diary,
 )
+from music_library import search_url
 from pressure_model import (
     calculate_pressure_score,
     get_pressure_level,
@@ -33,14 +37,19 @@ from ui import (
     PHYS_COLOR,
     SOCIAL_COLOR,
     STUDY_COLOR,
+    ai_comfort_box,
     breath_guide,
     card,
     color_psychology_item,
+    emotion_gradient,
     footer,
     hotline_box,
     main_title,
+    meditation_card,
+    music_card,
     recommendation_box,
     score_display,
+    solution_card,
     subtitle,
 )
 from visualization import (
@@ -321,6 +330,138 @@ def render_recommendation(score, level_info, color, theme):
 """)
 
 
+def _parse_breathing(s: str) -> dict:
+    """把 '478' 之类解析为呼吸参数；不足补默认。"""
+    nums = [int(c) for c in str(s) if c.isdigit()]
+    if len(nums) >= 3:
+        inhale, hold, exhale = nums[0], nums[1], nums[2]
+    elif len(nums) == 2:
+        inhale, hold, exhale = nums[0], 0, nums[1]
+    else:
+        inhale, hold, exhale = 4, 7, 8
+    return {"inhale": inhale, "hold": hold, "exhale": exhale, "cycles": 4}
+
+
+# ============ 欢迎页（AI 情绪陪伴入口） ============
+def render_welcome(theme):
+    st.markdown(main_title(), unsafe_allow_html=True)
+    st.markdown(subtitle(), unsafe_allow_html=True)
+
+    st.markdown(
+        f"""
+        <div style="text-align:center; margin: 30px 0;">
+            <h1>👋 Hi！</h1>
+            <h2>今天过得怎么样？</h2>
+            <p style="color:{theme.sub}; font-size:1.1rem;">有什么想分享的吗？</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.text_area(
+        "情绪表达",
+        placeholder="请输入今天发生的事情……",
+        height=180,
+        key="welcome_text",
+        label_visibility="collapsed",
+    )
+
+    # AI 设置（可选）：选择 provider 并粘贴 key
+    with st.expander("⚙️ AI 设置（可选，不填则使用本地陪伴）"):
+        provider = st.radio(
+            "选择 AI 模型", list(PROVIDERS.keys()), index=0, horizontal=True
+        )
+        st.session_state[f"api_key_{provider}"] = st.text_input(
+            f"{provider} API Key",
+            type="password",
+            value=st.session_state.get(f"api_key_{provider}", ""),
+        )
+        st.caption(
+            "Key 仅保存在本次会话，不会写入磁盘。也可通过环境变量 "
+            "ZHIPU_API_KEY / KIMI_API_KEY / GEMINI_API_KEY 提供。"
+        )
+
+    if st.button("💡 解决方法", use_container_width=True):
+        placeholder = st.empty()
+        steps = [
+            "🤖 AI正在倾听你的故事……",
+            "正在分析情绪……",
+            "正在寻找最适合你的音乐……",
+            "正在生成疗愈建议……",
+        ]
+        for s in steps:
+            placeholder.markdown(
+                f"<div style='text-align:center; color:{theme.sub}; "
+                f"font-size:1.05rem; margin:10px 0;'>{s}</div>",
+                unsafe_allow_html=True,
+            )
+            time.sleep(0.7)
+        placeholder.empty()
+
+        result = generate_companion(st.session_state.get("welcome_text", ""), provider)
+        st.session_state.companion = result
+        st.session_state.show_solution = True
+        st.rerun()
+
+    if st.session_state.get("show_solution", False) and st.session_state.get(
+        "companion"
+    ):
+        result = st.session_state.companion
+        color = result.get("color", "#6FCFC4")
+
+        # 情绪渐变：首次播放动画，之后静态着色（避免交互重播闪烁）
+        if st.session_state.get("companion_color") != color:
+            st.markdown(
+                emotion_gradient(color, theme, animate=True), unsafe_allow_html=True
+            )
+            st.session_state.companion_color = color
+        else:
+            st.markdown(
+                emotion_gradient(color, theme, animate=False), unsafe_allow_html=True
+            )
+
+        # AI 共情
+        st.markdown(
+            ai_comfort_box(result.get("comfort", ""), color, theme),
+            unsafe_allow_html=True,
+        )
+
+        # 音乐疗愈
+        st.markdown(music_card(result.get("music", {}), theme), unsafe_allow_html=True)
+        music = result.get("music", {})
+        if music.get("name"):
+            st.link_button(
+                "▶ 点击播放", search_url(music["name"], music.get("artist", ""))
+            )
+
+        # 呼吸训练
+        st.markdown("#### 🌬 接下来做一次呼吸训练")
+        breath = _parse_breathing(result.get("breathing", "478"))
+        st.markdown(breath_guide(breath, color, theme), unsafe_allow_html=True)
+
+        # 冥想
+        st.markdown("#### 🧘 最后做一次冥想")
+        st.markdown(
+            meditation_card(result.get("meditation", "3分钟正念呼吸"), theme),
+            unsafe_allow_html=True,
+        )
+        if st.button("🧘 开始冥想", use_container_width=True):
+            st.info(
+                "找一个舒服的姿势，闭上眼睛，跟随上面的呼吸节奏，"
+                "把注意力放在每一次吸气与呼气上……"
+            )
+
+        # 降级提示
+        if result.get("fallback"):
+            st.caption("ℹ️ 当前未接入 AI（未提供 Key 或调用失败），已使用本地陪伴建议。")
+
+        st.markdown("---")
+
+    if st.button("📊 进入压力分析 Dashboard", use_container_width=True, type="primary"):
+        st.session_state.entered_app = True
+        st.rerun()
+
+
 # ============ 主程序 ============
 def main():
     st.set_page_config(
@@ -340,6 +481,11 @@ def main():
     st.session_state.theme = "dark" if _choice.startswith("🌙") else "light"
     theme = get_theme()
     render_theme_style(theme)
+
+    # 情绪引导：欢迎页优先；未进入前侧边栏只保留主题切换
+    if not st.session_state.get("entered_app", False):
+        render_welcome(theme)
+        return
 
     # 侧边栏自测
     result, score, level_info = render_sidebar()
