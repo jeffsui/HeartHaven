@@ -19,7 +19,7 @@ def main_title() -> str:
 
 
 def subtitle() -> str:
-    return '<div class="subtitle">让看不见的压力，变成看得见的色彩</div>'
+    return '<div class="subtitle">Turn invisible emotions into visible colors</div>'
 
 
 def score_display(score: float, level_info: dict, color: str, theme: Theme) -> str:
