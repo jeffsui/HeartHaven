@@ -202,7 +202,8 @@ def emotion_gradient(color: str, theme: Theme, animate: bool = True) -> str:
     # 阈值选择，亮色背景需暗色前景（contrast-friendly）
     fg = "#111111" if lum > 0.5 else "#FFFFFF"
     fg_rgba = f"rgba({r}, {g}, {b}, 0.12)"
-    fg_border = f"rgba({r}, {g}, {b}, 0.22)"
+    fg_border = f"rgba({r}, {g}, {b}, 0.36)"
+    fg_border_strong = f"rgba({r}, {g}, {b}, 0.6)"
 
     # 注入更有侵略性的覆盖，包含文字、按钮、链接等元素
     if animate:
@@ -273,20 +274,23 @@ button, .stButton>button, a, .stButton button {{
     extra = f"""
 /* 边框与输入可见性增强 */
 .metric-card, .score-display, .hotline-box, .stCard, .stMarkdown, .stText, .stHeader, .stSidebar, .block-container {{
-    border-color: {fg_border} !important;
-    box-shadow: 0 0 0 1px {fg_border} inset !important;
+    border-color: {fg_border_strong} !important;
+    box-shadow: 0 0 0 2px {fg_border} inset !important;
+    outline: 1px solid {fg_border_strong} !important;
 }}
 
 input, textarea, select, .stTextInput>div, .stTextArea>div, .stNumberInput>div, .stSelectbox>div {{
-    border-color: {fg_border} !important;
-    box-shadow: 0 0 0 1px {fg_border} inset !important;
+    border-color: {fg_border_strong} !important;
+    box-shadow: 0 0 0 2px {fg_border} inset !important;
+    outline: 1px solid {fg_border_strong} !important;
     background-clip: padding-box !important;
 }}
 
 /* 保持按钮边界清晰 */
 .stButton>button, button, .stButton button {{
-    border: 1px solid {fg_border} !important;
-    box-shadow: 0 1px 0 0 rgba(0,0,0,0.06) !important;
+    border: 1px solid {fg_border_strong} !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12) !important;
+    outline: 1px solid {fg_border_strong} !important;
 }}
 """
 
