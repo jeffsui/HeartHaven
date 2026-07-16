@@ -33,9 +33,7 @@ PROVIDERS = {
     },
 }
 
-_MUSIC_TEXT = "\n".join(
-    f"- {m['name']} — {m['artist']}" for m in get_music_list()
-)
+_MUSIC_TEXT = "\n".join(f"- {m['name']} — {m['artist']}" for m in get_music_list())
 
 SYSTEM_PROMPT = f"""你是一个温柔、支持性、非评判的青少年情绪陪伴助手。
 用户会分享今天发生的事情或情绪。请你：
@@ -108,9 +106,7 @@ def generate_companion(user_text: str, provider: str = "智谱 GLM") -> dict:
         return _fallback(user_text)
 
     try:
-        client = OpenAI(
-            api_key=api_key, base_url=PROVIDERS[provider]["base_url"]
-        )
+        client = OpenAI(api_key=api_key, base_url=PROVIDERS[provider]["base_url"])
         resp = client.chat.completions.create(
             model=PROVIDERS[provider]["model"],
             messages=[

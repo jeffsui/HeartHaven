@@ -26,6 +26,7 @@ from data_utils import (
     save_diary_entry,
     seed_sample_diary,
 )
+from dotenv import load_dotenv
 from music_library import search_url
 from pressure_model import (
     calculate_pressure_score,
@@ -60,6 +61,8 @@ from visualization import (
     plot_pressure_wave,
     plot_sankey,
 )
+
+load_dotenv()
 
 
 # ============ 侧边栏：压力自测 ============

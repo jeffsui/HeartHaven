@@ -6,9 +6,9 @@ UI 组件模块
 这样 app.py 不再堆砌大段 HTML，整体更简洁、可复用。
 """
 
-from theme import Theme
-from solutions import SOLUTION_LIBRARY
 from music_library import search_url
+from solutions import SOLUTION_LIBRARY
+from theme import Theme
 
 # 三大压力维度品牌色（与主题无关，恒定）
 STUDY_COLOR = "#E8928C"  # 学习压力 · 柔珊瑚
@@ -122,9 +122,9 @@ def solution_card(sol_key: str, theme: Theme) -> str:
     return f"""
 <div style="background:{theme.card}; border:1px solid {theme.border}; border-top:4px solid {color};
             border-radius:12px; padding:18px; text-align:center; height:100%;">
-    <div style="font-size:2rem;">{info['emoji']}</div>
-    <div style="font-weight:700; color:{theme.title}; margin:6px 0;">{info['title']}</div>
-    <div style="font-size:0.85rem; color:{theme.sub};">{info['desc']}</div>
+    <div style="font-size:2rem;">{info["emoji"]}</div>
+    <div style="font-weight:700; color:{theme.title}; margin:6px 0;">{info["title"]}</div>
+    <div style="font-size:0.85rem; color:{theme.sub};">{info["desc"]}</div>
 </div>
 """
 
@@ -145,10 +145,10 @@ def music_card(music: dict, theme: Theme) -> str:
 <div style="background: {theme.card}; border: 1px solid {theme.border}; border-radius: 12px; padding: 18px;">
     <div style="font-weight: 700; color: {theme.title}; font-size: 1.05rem; margin-bottom: 6px;">🎵 推荐歌曲</div>
     <div style="margin: 6px 0;">
-        <strong style="color: {theme.title}; font-size: 1.15rem;">{music.get('name', '')}</strong>
-        <span style="color: {theme.sub};"> — {music.get('artist', '')}</span>
+        <strong style="color: {theme.title}; font-size: 1.15rem;">{music.get("name", "")}</strong>
+        <span style="color: {theme.sub};"> — {music.get("artist", "")}</span>
     </div>
-    <div style="font-size: 0.9rem; color: {theme.sub};">推荐原因：{music.get('reason', '')}</div>
+    <div style="font-size: 0.9rem; color: {theme.sub};">推荐原因：{music.get("reason", "")}</div>
 </div>
 """
 
@@ -169,29 +169,127 @@ def emotion_gradient(color: str, theme: Theme, animate: bool = True) -> str:
     animate=True 时播放 2.5s 渐变动画（首次进入陪伴页）；
     animate=False 时直接静态着色（避免后续交互重播闪烁）。
     """
+
+    # 计算颜色明度并选择合适的前景色（深色或白色）以保证对比度
+    def _hex_to_rgb(h: str):
+        h = h.lstrip("#")
+        if len(h) == 3:
+            h = "".join([c * 2 for c in h])
+        r = int(h[0:2], 16)
+        g = int(h[2:4], 16)
+        b = int(h[4:6], 16)
+        return r, g, b
+
+    def _relative_luminance(r, g, b):
+        # sRGB -> linear
+        def _f(c):
+            c = c / 255.0
+            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+        R = _f(r)
+        G = _f(g)
+        B = _f(b)
+        return 0.2126 * R + 0.7152 * G + 0.0722 * B
+
+    try:
+        r, g, b = _hex_to_rgb(color)
+        lum = _relative_luminance(r, g, b)
+    except Exception:
+        # 解析失败时回退到主题文本色
+        lum = 0.0
+        r, g, b = (0, 0, 0)
+
+    # 阈值选择，亮色背景需暗色前景（contrast-friendly）
+    fg = "#111111" if lum > 0.5 else "#FFFFFF"
+    fg_rgba = f"rgba({r}, {g}, {b}, 0.12)"
+    fg_border = f"rgba({r}, {g}, {b}, 0.22)"
+
+    # 注入更有侵略性的覆盖，包含文字、按钮、链接等元素
     if animate:
         body = f"""
 @keyframes emotionFade {{
-    from {{ background-color: {theme.bg}; }}
-    to {{ background-color: {color}; }}
+    0% {{ background-color: {theme.bg} !important; color: {theme.text} !important; }}
+    100% {{ background-color: {color} !important; color: {fg} !important; }}
 }}
-html, body, .stApp,
-[data-testid="stAppViewContainer"],
-[data-testid="stMain"],
-[data-testid="stMainBlockContainer"],
-.block-container {{
+* {{
     animation: emotionFade 2.5s ease forwards !important;
-}}"""
+}}
+html, body {{
+    background-color: {color} !important;
+    background: {color} !important;
+    color: {fg} !important;
+}}
+section[data-testid="stAppViewContainer"] {{
+    background-color: {color} !important;
+    background: {color} !important;
+    color: {fg} !important;
+}}
+div[data-testid="stMain"] {{
+    background-color: {color} !important;
+    background: {color} !important;
+    color: {fg} !important;
+}}
+div[class*="block-container"] {{
+    background-color: {color} !important;
+    background: {color} !important;
+    color: {fg} !important;
+}}
+.stApp {{
+    background-color: {color} !important;
+    background: {color} !important;
+    color: {fg} !important;
+}}
+
+/* 按钮与链接 */
+button, .stButton>button, a, .stButton button {{
+    color: {fg} !important;
+    background-color: {fg_rgba} !important;
+    border-color: {fg_border} !important;
+}}
+
+/* Streamlit 组件的文本覆盖 */
+.stMarkdown, .stText, .main-title, .subtitle, .score-display, .metric-card, .hotline-box {{
+    color: {fg} !important;
+}}
+"""
     else:
         body = f"""
 html, body, .stApp,
 [data-testid="stAppViewContainer"],
 [data-testid="stMain"],
-[data-testid="stMainBlockContainer"],
-.block-container {{
+div[class*="block-container"] {{
     background-color: {color} !important;
     background: {color} !important;
-}}"""
+    color: {fg} !important;
+}}
+
+button, .stButton>button, a, .stButton button {{
+    color: {fg} !important;
+    background-color: {fg_rgba} !important;
+    border-color: {fg_border} !important;
+}}
+"""
+    # 额外覆盖：增强边框可见性（特别是在亮色背景下）
+    extra = f"""
+/* 边框与输入可见性增强 */
+.metric-card, .score-display, .hotline-box, .stCard, .stMarkdown, .stText, .stHeader, .stSidebar, .block-container {{
+    border-color: {fg_border} !important;
+    box-shadow: 0 0 0 1px {fg_border} inset !important;
+}}
+
+input, textarea, select, .stTextInput>div, .stTextArea>div, .stNumberInput>div, .stSelectbox>div {{
+    border-color: {fg_border} !important;
+    box-shadow: 0 0 0 1px {fg_border} inset !important;
+    background-clip: padding-box !important;
+}}
+
+/* 保持按钮边界清晰 */
+.stButton>button, button, .stButton button {{
+    border: 1px solid {fg_border} !important;
+    box-shadow: 0 1px 0 0 rgba(0,0,0,0.06) !important;
+}}
+"""
+
     return f"""
 <style>
 {body}
@@ -199,5 +297,6 @@ html, body, .stApp,
     background: {color} !important;
     transition: background 2.5s ease !important;
 }}
+{extra}
 </style>
 """
