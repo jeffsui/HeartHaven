@@ -75,7 +75,7 @@ def render_sidebar():
     if test_mode == "快速测评（3题）":
         st.sidebar.markdown("---")
         st.sidebar.markdown("### 快速压力测评")
-        sleep = st.sidebar.slider("😴 昨晚睡了几小时？", 0.0, 12.0, 7.0, 0.5)
+        sleep = st.sidebar.slider("😴 昨晚睡了几小时？", 0.0, 12.0, 8.0, 0.5)
         mood = st.sidebar.slider("😊 当前心情（1-10分）", 1.0, 10.0, 5.0, 0.5)
         stress = st.sidebar.slider("😰 当前压力感（1-10分）", 1.0, 10.0, 5.0, 0.5)
         result = quick_pressure_score(sleep=sleep, mood=mood, stress=stress)
@@ -87,10 +87,10 @@ def render_sidebar():
         homework = st.sidebar.slider("每天作业时长（小时）", 0.0, 5.0, 2.0, 0.5)
         exam_freq = st.sidebar.slider("每周考试/测验次数", 0.0, 6.0, 2.0, 0.5)
         grade_var = st.sidebar.slider("成绩波动程度（1-10）", 1.0, 10.0, 3.0, 0.5)
-        tutoring = st.sidebar.slider("课外辅导班数量", 0.0, 5.0, 1.0, 0.5)
+        tutoring = st.sidebar.slider("课外辅导班数量", 0.0, 5.0, 3.0, 0.5)
 
         st.sidebar.markdown("#### 💪 生理状态")
-        sleep_h = st.sidebar.slider("每天睡眠时长（小时）", 0.0, 12.0, 7.0, 0.5)
+        sleep_h = st.sidebar.slider("每天睡眠时长（小时）", 0.0, 12.0, 8.0, 0.5)
         sleep_q = st.sidebar.slider("睡眠质量（1-10分）", 1.0, 10.0, 6.0, 0.5)
         exercise = st.sidebar.slider("每周运动次数", 0.0, 7.0, 2.0, 0.5)
 
