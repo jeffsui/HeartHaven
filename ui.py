@@ -60,13 +60,10 @@ def card(title: str, value, color: str, theme: Theme, value_color: str = None) -
 
 
 def recommendation_box(level_info: dict, color: str, theme: Theme) -> str:
-    """个性化减压方案：推荐音乐 / 活动。"""
+    """个性化减压方案：推荐活动（推荐音乐已由 AI 情绪陪伴给出，此处不再重复）。"""
     return f"""
 <div style="background: {color}22; border-radius: 15px; padding: 25px; border: 2px solid {color};">
-    <h3 style="color: {color};">🎵 推荐音乐</h3>
-    <p style="font-size: 16px;">{level_info["audio"]}</p>
-
-    <h3 style="color: {color}; margin-top: 15px;">🧘 推荐活动</h3>
+    <h3 style="color: {color};">🧘 推荐活动</h3>
     <p style="font-size: 16px;">{level_info["activity"]}</p>
 </div>
 """

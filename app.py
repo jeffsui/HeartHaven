@@ -123,7 +123,14 @@ def render_sidebar():
 
 # ============ Tab 1: 仪表盘 ============
 def render_dashboard(result, score, level_info, color, theme):
-    st.subheader("🏠 压力仪表盘")
+    st.subheader("🧪 压力测评")
+
+    # AI 情绪陪伴（解决方法）与欢迎页保持一致：此前 AI 已给出的分析/音乐/呼吸/冥想
+    companion = st.session_state.get("companion")
+    if companion:
+        st.markdown("#### 🤖 AI 情绪陪伴 · 你的解决方法")
+        render_solution_section(companion, theme, with_gradient=False)
+        st.markdown("---")
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -313,6 +320,19 @@ def render_diary(score, theme):
 def render_recommendation(score, level_info, color, theme):
     st.subheader("💡 个性化减压方案")
 
+    # 与 AI 情绪陪伴（压力测评里的解决方法）保持一致：优先展示 AI 推荐的那首歌
+    companion = st.session_state.get("companion")
+    music = companion.get("music", {}) if companion else {}
+    if music.get("name"):
+        st.markdown("#### 🎵 为你推荐的音乐（与 AI 陪伴一致）")
+        st.markdown(music_card(music, theme), unsafe_allow_html=True)
+        st.link_button(
+            "▶ 点击播放",
+            search_url(music["name"], music.get("artist", "")),
+            key="reco_play",
+        )
+        st.markdown("---")
+
     st.markdown(recommendation_box(level_info, color, theme), unsafe_allow_html=True)
 
     # 呼吸引导
@@ -343,6 +363,63 @@ def _parse_breathing(s: str) -> dict:
     else:
         inhale, hold, exhale = 4, 7, 8
     return {"inhale": inhale, "hold": hold, "exhale": exhale, "cycles": 4}
+
+
+def render_solution_section(result: dict, theme, with_gradient: bool = False):
+    """渲染 AI 解决方法：共情 → 音乐 → 呼吸 → 冥想。
+
+    可在欢迎页（带情绪渐变）与『压力测评』Tab（不带渐变，避免污染整个仪表盘主题）复用。
+    """
+    color = result.get("color", "#6FCFC4")
+
+    # 情绪渐变：首次播放动画，之后静态着色（避免交互重播闪烁）
+    if with_gradient:
+        if st.session_state.get("companion_color") != color:
+            st.markdown(
+                emotion_gradient(color, theme, animate=True), unsafe_allow_html=True
+            )
+            st.session_state.companion_color = color
+        else:
+            st.markdown(
+                emotion_gradient(color, theme, animate=False), unsafe_allow_html=True
+            )
+
+    # AI 共情
+    st.markdown(
+        ai_comfort_box(result.get("comfort", ""), color, theme),
+        unsafe_allow_html=True,
+    )
+
+    # 音乐疗愈
+    st.markdown(music_card(result.get("music", {}), theme), unsafe_allow_html=True)
+    music = result.get("music", {})
+    if music.get("name"):
+        st.link_button(
+            "▶ 点击播放",
+            search_url(music["name"], music.get("artist", "")),
+            key="solution_play",
+        )
+
+    # 呼吸训练
+    st.markdown("#### 🌬 接下来做一次呼吸训练")
+    breath = _parse_breathing(result.get("breathing", "478"))
+    st.markdown(breath_guide(breath, color, theme), unsafe_allow_html=True)
+
+    # 冥想
+    st.markdown("#### 🧘 最后做一次冥想")
+    st.markdown(
+        meditation_card(result.get("meditation", "3分钟正念呼吸"), theme),
+        unsafe_allow_html=True,
+    )
+    if st.button("🧘 开始冥想", use_container_width=True, key="solution_meditation"):
+        st.info(
+            "找一个舒服的姿势，闭上眼睛，跟随上面的呼吸节奏，"
+            "把注意力放在每一次吸气与呼气上……"
+        )
+
+    # 降级提示
+    if result.get("fallback"):
+        st.caption("ℹ️ 当前未接入 AI（未提供 Key 或调用失败），已使用本地陪伴建议。")
 
 
 # ============ 欢迎页（AI 情绪陪伴入口） ============
@@ -406,13 +483,12 @@ def render_welcome(theme):
         st.session_state.show_solution = True
         st.rerun()
 
+    # 点击「解决方法」后，AI 结果不在欢迎页展示，而是进入 Dashboard 的「压力测评」后再显示
     if st.session_state.get("show_solution", False) and st.session_state.get(
         "companion"
     ):
-        result = st.session_state.companion
-        color = result.get("color", "#6FCFC4")
-
-        # 情绪渐变：首次播放动画，之后静态着色（避免交互重播闪烁）
+        # 保留情绪渐变作为情感反馈（不展示文字结果）
+        color = st.session_state.companion.get("color", "#6FCFC4")
         if st.session_state.get("companion_color") != color:
             st.markdown(
                 emotion_gradient(color, theme, animate=True), unsafe_allow_html=True
@@ -423,46 +499,25 @@ def render_welcome(theme):
                 emotion_gradient(color, theme, animate=False), unsafe_allow_html=True
             )
 
-        # AI 共情
-        st.markdown(
-            ai_comfort_box(result.get("comfort", ""), color, theme),
-            unsafe_allow_html=True,
+        st.success(
+            "✅ AI 已为你生成专属建议（音乐 / 呼吸 / 冥想），"
+            "进入「压力测评」即可查看。"
         )
-
-        # 音乐疗愈
-        st.markdown(music_card(result.get("music", {}), theme), unsafe_allow_html=True)
-        music = result.get("music", {})
-        if music.get("name"):
-            st.link_button(
-                "▶ 点击播放", search_url(music["name"], music.get("artist", ""))
-            )
-
-        # 呼吸训练
-        st.markdown("#### 🌬 接下来做一次呼吸训练")
-        breath = _parse_breathing(result.get("breathing", "478"))
-        st.markdown(breath_guide(breath, color, theme), unsafe_allow_html=True)
-
-        # 冥想
-        st.markdown("#### 🧘 最后做一次冥想")
-        st.markdown(
-            meditation_card(result.get("meditation", "3分钟正念呼吸"), theme),
-            unsafe_allow_html=True,
-        )
-        if st.button("🧘 开始冥想", use_container_width=True):
-            st.info(
-                "找一个舒服的姿势，闭上眼睛，跟随上面的呼吸节奏，"
-                "把注意力放在每一次吸气与呼气上……"
-            )
-
-        # 降级提示
-        if result.get("fallback"):
-            st.caption("ℹ️ 当前未接入 AI（未提供 Key 或调用失败），已使用本地陪伴建议。")
-
-        st.markdown("---")
-
-    if st.button("📊 进入压力分析 Dashboard", use_container_width=True, type="primary"):
-        st.session_state.entered_app = True
-        st.rerun()
+        if st.button(
+            "📊 进入压力分析 Dashboard",
+            use_container_width=True,
+            type="primary",
+        ):
+            st.session_state.entered_app = True
+            st.rerun()
+    else:
+        # 未使用 AI 陪伴时，仍可跳过直接进入 Dashboard
+        if st.button(
+            "📊 直接进入压力分析 Dashboard（跳过 AI 陪伴）",
+            use_container_width=True,
+        ):
+            st.session_state.entered_app = True
+            st.rerun()
 
 
 # ============ 主程序 ============
@@ -503,7 +558,7 @@ def main():
 
     # 四个 Tab
     tab1, tab2, tab3, tab4 = st.tabs(
-        ["🏠 仪表盘", "📊 数据分析", "📖 情绪日记", "💡 减压推荐"]
+        ["🧪 压力测评", "📊 数据分析", "📖 情绪日记", "💡 减压推荐"]
     )
     with tab1:
         render_dashboard(result, score, level_info, color, theme)
