@@ -70,7 +70,7 @@ def recommendation_box(level_info: dict, color: str, theme: Theme) -> str:
 
 
 def breath_guide(breath: dict, color: str, theme: Theme) -> str:
-    """呼吸引导区块。"""
+    """呼吸引导区块：带节奏动画与倒计时，颜色每 4-5 秒切换一次。"""
     if breath.get("hold", 0) > 0:
         pattern = (
             f"吸气 {breath['inhale']}秒 → 屏息 {breath['hold']}秒 "
@@ -80,11 +80,10 @@ def breath_guide(breath: dict, color: str, theme: Theme) -> str:
         pattern = f"吸气 {breath['inhale']}秒 → 呼气 {breath['exhale']}秒"
     return f"""
 <div style="background: {theme.card}; border-radius: 15px; padding: 25px; text-align: center;">
-    <div class="breath-circle" style="background: {color}; color: white; margin: 10px auto;">
-        🫁
-    </div>
+    <div class="breath-anim">🫁<span class="breath-count"></span></div>
     <p style="font-size: 18px; font-weight: bold;">{pattern}</p>
-    <p>重复 {breath["cycles"]} 个循环</p>
+    <p style="color: {theme.sub};">跟随圆圈节奏：每 4-5 秒颜色切换一次（青绿→蓝→紫），
+    倒计时数字每拍递减，重复 {breath["cycles"]} 个循环。</p>
 </div>
 """
 
@@ -297,6 +296,38 @@ input, textarea, select, .stTextInput>div, .stTextArea>div, .stNumberInput>div, 
 .breath-circle {{
     background: {color} !important;
     transition: background 2.5s ease !important;
+}}
+/* 呼吸训练：缩放随节奏起伏，颜色每 ~4.5s 切换一次（吸气色 / 呼气色） */
+@keyframes breathScale {{
+    0%   {{ transform: scale(0.85); }}
+    44%  {{ transform: scale(1.25); }}
+    56%  {{ transform: scale(1.25); }}
+    100% {{ transform: scale(0.85); }}
+}}
+@keyframes breathColor {{
+    0%   {{ background-color: #5BC8B0; }}   /* 吸气：宁静青绿 */
+    50%  {{ background-color: #4A90D9; }}   /* 屏息/转换：安抚蓝 */
+    100% {{ background-color: #9B7ED9; }}   /* 呼气：舒缓紫 */
+}}
+.breath-anim {{
+    width: 120px; height: 120px; border-radius: 50%;
+    margin: 12px auto; color: #fff; font-size: 2rem;
+    display: flex; align-items: center; justify-content: center;
+    animation: breathScale 9s ease-in-out infinite,
+               breathColor 9s linear infinite;
+}}
+/* 倒计时数字：用伪元素循环显示 4→3→2→1（每 ~2.25s 一跳，覆盖一个 9s 循环） */
+@keyframes breathCount {{
+    0%   {{ content: "4"; }}
+    25%  {{ content: "3"; }}
+    50%  {{ content: "2"; }}
+    75%  {{ content: "1"; }}
+    100% {{ content: "4"; }}
+}}
+.breath-count::after {{
+    content: "4";
+    animation: breathCount 9s steps(1) infinite;
+    font-size: 1.4rem; font-weight: 700; color: #fff; margin-left: 8px;
 }}
 {extra}
 </style>

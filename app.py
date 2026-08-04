@@ -168,7 +168,7 @@ def render_dashboard(result, score, level_info, color, theme):
         )
 
     # 压力波段曲线
-    st.markdown("#### 📈 一周压力波动预测")
+    st.markdown("#### 📈 一周压力波动")
     weekly_data = generate_sample_weekly_data(score)
     st.pyplot(plot_pressure_wave(weekly_data, color=color, theme=theme))
 
@@ -327,7 +327,7 @@ def render_recommendation(score, level_info, color, theme):
         st.markdown("#### 🎵 为你推荐的音乐（与 AI 陪伴一致）")
         st.markdown(music_card(music, theme), unsafe_allow_html=True)
         st.link_button(
-            "▶ 点击播放",
+            "🎧 打开歌曲播放列表",
             search_url(music["name"], music.get("artist", "")),
             key="reco_play",
         )
@@ -395,7 +395,7 @@ def render_solution_section(result: dict, theme, with_gradient: bool = False):
     music = result.get("music", {})
     if music.get("name"):
         st.link_button(
-            "▶ 点击播放",
+            "🎧 打开歌曲播放列表",
             search_url(music["name"], music.get("artist", "")),
             key="solution_play",
         )
@@ -478,7 +478,14 @@ def render_welcome(theme):
             time.sleep(0.7)
         placeholder.empty()
 
+        # AI 生成可能耗时数秒，先给出明确的等待提示，避免误以为卡死
+        waiting = st.empty()
+        waiting.info(
+            "⏳ AI 正在为你生成专属建议，请稍候片刻……"
+            "（若未配置 API Key 将使用本地陪伴，稍快一些）"
+        )
         result = generate_companion(st.session_state.get("welcome_text", ""), provider)
+        waiting.empty()
         st.session_state.companion = result
         st.session_state.show_solution = True
         st.rerun()
