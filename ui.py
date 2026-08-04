@@ -70,7 +70,7 @@ def recommendation_box(level_info: dict, color: str, theme: Theme) -> str:
 
 
 def breath_guide(breath: dict, color: str, theme: Theme) -> str:
-    """呼吸引导区块：带节奏动画与倒计时，颜色每 4-5 秒切换一次。"""
+    """呼吸引导区块：带节奏动画与倒计时，颜色每 5 秒闪烁一次。"""
     if breath.get("hold", 0) > 0:
         pattern = (
             f"吸气 {breath['inhale']}秒 → 屏息 {breath['hold']}秒 "
@@ -78,13 +78,91 @@ def breath_guide(breath: dict, color: str, theme: Theme) -> str:
         )
     else:
         pattern = f"吸气 {breath['inhale']}秒 → 呼气 {breath['exhale']}秒"
+
+    uid = (
+        abs(
+            hash(
+                f"{breath.get('inhale')}-{breath.get('hold')}-{breath.get('exhale')}-{breath.get('cycles')}-{color}"
+            )
+        )
+        % 1000000
+    )
+    cycle_count = breath.get("cycles", 4)
+
     return f"""
 <div style="background: {theme.card}; border-radius: 15px; padding: 25px; text-align: center;">
-    <div class="breath-anim">🫁<span class="breath-count"></span></div>
-    <p style="font-size: 18px; font-weight: bold;">{pattern}</p>
-    <p style="color: {theme.sub};">跟随圆圈节奏：每 4-5 秒颜色切换一次（青绿→蓝→紫），
-    倒计时数字每拍递减，重复 {breath["cycles"]} 个循环。</p>
+    <div class="breath-anim" id="breath-anim-{uid}">
+        <span class="breath-icon">🫁</span>
+        <span class="breath-count" id="breath-count-{uid}">5</span>
+    </div>
+    <p style="font-size: 18px; font-weight: bold; margin: 12px 0;">{pattern}</p>
+    <p style="color: {theme.sub}; margin-bottom: 0;">真实倒计时：每 5 秒自动变色一次，倒计时数字从 5 到 1，重复 {cycle_count} 次循环。</p>
 </div>
+<style>
+.breath-anim {{
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    margin: 14px auto;
+    color: #fff;
+    font-size: 1.8rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: #5BC8B0;
+    transition: background 0.8s ease;
+}}
+.breath-icon {{
+    font-size: 1.8rem;
+}}
+.breath-count {{
+    font-size: 1.8rem;
+    font-weight: 700;
+}}
+</style>
+<script>
+(function() {{
+    const anim = document.getElementById('breath-anim-{uid}');
+    const countEl = document.getElementById('breath-count-{uid}');
+    if (!anim || !countEl || window.__breathGuideStarted_{uid}) return;
+    window.__breathGuideStarted_{uid} = true;
+
+    const colors = ['#5BC8B0', '#4A90D9', '#9B7ED9', '#F29BB2'];
+    const intervalSeconds = 5;
+    let phase = 0;
+    let timeLeft = intervalSeconds;
+    let currentCycle = 1;
+    const maxCycles = {cycle_count};
+
+    function updateDisplay() {{
+        countEl.textContent = String(timeLeft);
+    }}
+
+    function nextPhase() {{
+        phase = (phase + 1) % colors.length;
+        anim.style.backgroundColor = colors[phase];
+        timeLeft = intervalSeconds;
+        currentCycle += 1;
+        if (maxCycles > 0 && currentCycle > maxCycles) {{
+            clearInterval(timer);
+            countEl.textContent = '0';
+            return;
+        }}
+        updateDisplay();
+    }}
+
+    updateDisplay();
+    const timer = setInterval(() => {{
+        timeLeft -= 1;
+        if (timeLeft <= 0) {{
+            nextPhase();
+            return;
+        }}
+        updateDisplay();
+    }}, 1000);
+}})();
+</script>
 """
 
 
@@ -297,7 +375,7 @@ input, textarea, select, .stTextInput>div, .stTextArea>div, .stNumberInput>div, 
     background: {color} !important;
     transition: background 2.5s ease !important;
 }}
-/* 呼吸训练：缩放随节奏起伏，颜色每 ~4.5s 切换一次（吸气色 / 呼气色） */
+/* 呼吸训练：缩放随节奏起伏，颜色每 4 秒闪动变色 */
 @keyframes breathScale {{
     0%   {{ transform: scale(0.85); }}
     44%  {{ transform: scale(1.25); }}
@@ -306,17 +384,19 @@ input, textarea, select, .stTextInput>div, .stTextArea>div, .stNumberInput>div, 
 }}
 @keyframes breathColor {{
     0%   {{ background-color: #5BC8B0; }}   /* 吸气：宁静青绿 */
-    50%  {{ background-color: #4A90D9; }}   /* 屏息/转换：安抚蓝 */
-    100% {{ background-color: #9B7ED9; }}   /* 呼气：舒缓紫 */
+    25%  {{ background-color: #4A90D9; }}   /* 切换：安抚蓝 */
+    50%  {{ background-color: #9B7ED9; }}   /* 呼气：舒缓紫 */
+    75%  {{ background-color: #F29BB2; }}   /* 放松：暖粉色 */
+    100% {{ background-color: #5BC8B0; }}   /* 回到吸气色 */
 }}
 .breath-anim {{
     width: 120px; height: 120px; border-radius: 50%;
     margin: 12px auto; color: #fff; font-size: 2rem;
     display: flex; align-items: center; justify-content: center;
-    animation: breathScale 9s ease-in-out infinite,
-               breathColor 9s linear infinite;
+    animation: breathScale 16s ease-in-out infinite,
+               breathColor 16s linear infinite;
 }}
-/* 倒计时数字：用伪元素循环显示 4→3→2→1（每 ~2.25s 一跳，覆盖一个 9s 循环） */
+/* 倒计时数字：用伪元素循环显示 4→3→2→1，每 4 秒一跳，覆盖一个 16s 循环 */
 @keyframes breathCount {{
     0%   {{ content: "4"; }}
     25%  {{ content: "3"; }}
@@ -326,7 +406,7 @@ input, textarea, select, .stTextInput>div, .stTextArea>div, .stNumberInput>div, 
 }}
 .breath-count::after {{
     content: "4";
-    animation: breathCount 9s steps(1) infinite;
+    animation: breathCount 16s steps(1) infinite;
     font-size: 1.4rem; font-weight: 700; color: #fff; margin-left: 8px;
 }}
 {extra}

@@ -17,6 +17,7 @@ import time
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from ai_companion import PROVIDERS, generate_companion
 from color_mapping import PRESSURE_COLOR_MAP, get_breath_animation_params
 from data_utils import (
@@ -338,7 +339,7 @@ def render_recommendation(score, level_info, color, theme):
     # 呼吸引导
     st.markdown("#### 🫁 呼吸引导")
     breath = get_breath_animation_params(score)
-    st.markdown(breath_guide(breath, color, theme), unsafe_allow_html=True)
+    components.html(breath_guide(breath, color, theme), height=340, scrolling=False)
 
     # 色彩心理学
     st.markdown("#### 🎨 色彩心理学解读")
@@ -403,7 +404,7 @@ def render_solution_section(result: dict, theme, with_gradient: bool = False):
     # 呼吸训练
     st.markdown("#### 🌬 接下来做一次呼吸训练")
     breath = _parse_breathing(result.get("breathing", "478"))
-    st.markdown(breath_guide(breath, color, theme), unsafe_allow_html=True)
+    components.html(breath_guide(breath, color, theme), height=340, scrolling=False)
 
     # 冥想
     st.markdown("#### 🧘 最后做一次冥想")
@@ -507,8 +508,7 @@ def render_welcome(theme):
             )
 
         st.success(
-            "✅ AI 已为你生成专属建议（音乐 / 呼吸 / 冥想），"
-            "进入「压力测评」即可查看。"
+            "✅ AI 已为你生成专属建议（音乐 / 呼吸 / 冥想），进入「压力测评」即可查看。"
         )
         if st.button(
             "📊 进入压力分析 Dashboard",
