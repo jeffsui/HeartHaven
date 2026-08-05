@@ -94,7 +94,9 @@ def plot_pressure_wave(
     )
 
     fig.update_layout(
-        title=dict(text="📊 一周压力波段曲线", font=dict(size=18), x=0.5, xanchor="center"),
+        title=dict(
+            text="📊 一周压力波段曲线", font=dict(size=18), x=0.5, xanchor="center"
+        ),
         title_x=0.5,
         xaxis=dict(title="日期", tickmode="array", tickvals=days),
         yaxis=dict(title="压力指数", range=[0, 105]),
