@@ -171,7 +171,10 @@ def render_dashboard(result, score, level_info, color, theme):
     # 压力波段曲线
     st.markdown("#### 📈 一周压力波动")
     weekly_data = generate_sample_weekly_data(score)
-    st.pyplot(plot_pressure_wave(weekly_data, color=color, theme=theme))
+    st.plotly_chart(
+        plot_pressure_wave(weekly_data, color=color, theme=theme),
+        use_container_width=True,
+    )
 
     # 压力来源饼图
     st.markdown("#### 🎯 压力来源分布")
