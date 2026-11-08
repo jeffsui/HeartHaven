@@ -73,15 +73,13 @@ INDEX_COLORS = (STUDY_COLOR, PHYS_COLOR, SOCIAL_COLOR)
 # ============ 侧边栏：按实际数据字段录入 ============
 def render_sidebar(df):
     st.sidebar.title("🧪 压力测评")
-    st.sidebar.caption("字段与 `data/sample_data.csv` 保持一致")
+    # st.sidebar.caption("字段与 `data/sample_data.csv` 保持一致")
 
     if df.empty:
         defaults = [50, 50, 50]
         genders = ["female", "male"]
     else:
-        defaults = [
-            min(100, max(0, int(round(df[col].mean())))) for col in INDEX_COLS
-        ]
+        defaults = [min(100, max(0, int(round(df[col].mean())))) for col in INDEX_COLS]
         genders = sorted(df[COL_GENDER].dropna().unique().tolist()) or [
             "female",
             "male",
