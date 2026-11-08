@@ -1,97 +1,75 @@
 """
-示例数据与数据工具
+实际问卷数据与数据工具
+
+`data/sample_data.csv` 为实际问卷数据，字段固定为：
+    性别,睡眠时长,压力指数1,压力指数2,压力指数3,平均值,情绪波动原因
+本模块只读取该文件并做类型规范化，不再生成或覆盖模拟数据。
 """
 
-import pandas as pd
-import numpy as np
 import json
 import os
+
+import pandas as pd
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 SAMPLE_CSV = os.path.join(DATA_DIR, "sample_data.csv")
 DIARY_JSON = os.path.join(DATA_DIR, "diary.json")
 
+COL_GENDER = "性别"
+COL_SLEEP = "睡眠时长"
+INDEX_COLS = ["压力指数1", "压力指数2", "压力指数3"]
+COL_AVG = "平均值"
+COL_REASON = "情绪波动原因"
+COL_SLEEP_HOURS = "睡眠小时数"  # 派生列：从 "7 hours" 中解析出的数值
 
-def generate_sample_data(n: int = 80, seed: int = 42) -> pd.DataFrame:
-    """
-    生成模拟问卷数据（n位同学）。
-    刻意覆盖四种压力等级，并形成清晰的年级/性别梯度，便于展示对比。
-    注意：本数据由随机数生成，仅用于演示，不代表真实群体。
-    """
-    np.random.seed(seed)
-    df = pd.DataFrame({
-        "grade": np.random.choice(["初一", "初二", "初三"], n, p=[0.3, 0.35, 0.35]),
-        "gender": np.random.choice(["男", "女"], n, p=[0.5, 0.5]),
-        "homework_hours": np.random.normal(2.5, 1.0, n),
-        "exam_frequency": np.random.normal(2.5, 1.2, n),
-        "grade_variance": np.random.normal(4, 2, n),
-        "tutoring_count": np.random.poisson(1.5, n).astype(float),
-        "sleep_hours": np.random.normal(7, 1.2, n),
-        "sleep_quality": np.random.normal(6, 2, n),
-        "exercise_freq": np.random.poisson(2, n).astype(float),
-        "conflict_count": np.random.poisson(1, n).astype(float),
-        "parent_criticism": np.random.normal(2.5, 1, n),
-        "social_media_hours": np.random.normal(2, 1.5, n),
-        "loneliness_score": np.random.normal(4, 2, n),
-    })
-
-    # 年级梯度：初三学生压力更大
-    m9 = df["grade"] == "初三"
-    df.loc[m9, "homework_hours"] += 1.0
-    df.loc[m9, "exam_frequency"] += 1.0
-    df.loc[m9, "sleep_hours"] -= 0.8
-    df.loc[m9, "loneliness_score"] += 0.8
-
-    # 性别梯度（展示差异，非定论）
-    mf = df["gender"] == "女"
-    df.loc[mf, "loneliness_score"] += 0.5
-    df.loc[mf, "parent_criticism"] += 0.3
-
-    # 裁剪到合理范围
-    clip = {
-        "homework_hours": (0.5, 5), "exam_frequency": (0, 6), "grade_variance": (1, 10),
-        "tutoring_count": (0, 5), "sleep_hours": (4, 11), "sleep_quality": (1, 10),
-        "exercise_freq": (0, 7), "conflict_count": (0, 5), "parent_criticism": (1, 5),
-        "social_media_hours": (0, 8), "loneliness_score": (1, 10),
-    }
-    for c, (lo, hi) in clip.items():
-        df[c] = df[c].clip(lo, hi)
-
-    # 注入少量极端样本，保证四档色彩都有展示
-    extras = pd.DataFrame([
-        # 轻松型（低频压力 0-30）
-        {"grade": "初一", "gender": "男", "homework_hours": 1, "exam_frequency": 0.5,
-         "grade_variance": 1.5, "tutoring_count": 0, "sleep_hours": 9, "sleep_quality": 9,
-         "exercise_freq": 5, "conflict_count": 0, "parent_criticism": 1,
-         "social_media_hours": 1, "loneliness_score": 1.5},
-        # 高压力型（高频压力 61-85）
-        {"grade": "初二", "gender": "女", "homework_hours": 4.5, "exam_frequency": 5,
-         "grade_variance": 8, "tutoring_count": 3, "sleep_hours": 5, "sleep_quality": 3,
-         "exercise_freq": 0, "conflict_count": 3, "parent_criticism": 4,
-         "social_media_hours": 4, "loneliness_score": 7},
-        # 超负荷型（超高频压力 86-100）
-        {"grade": "初三", "gender": "女", "homework_hours": 5, "exam_frequency": 6,
-         "grade_variance": 9, "tutoring_count": 4, "sleep_hours": 4.5, "sleep_quality": 2,
-         "exercise_freq": 0, "conflict_count": 4, "parent_criticism": 5,
-         "social_media_hours": 6, "loneliness_score": 9},
-    ])
-    df = pd.concat([df, extras], ignore_index=True)
-    return df
+RAW_COLUMNS = [COL_GENDER, COL_SLEEP, *INDEX_COLS, COL_AVG, COL_REASON]
 
 
-def save_sample_data():
-    """保存示例数据到CSV"""
-    df = generate_sample_data()
-    os.makedirs(DATA_DIR, exist_ok=True)
-    df.to_csv(SAMPLE_CSV, index=False, encoding="utf-8-sig")
-    return SAMPLE_CSV
+def split_reasons(value) -> list:
+    """把 "grade, family" 之类的单元格拆成原因标签列表。"""
+    if pd.isna(value):
+        return []
+    return [part.strip() for part in str(value).split(",") if part.strip()]
+
+
+def reason_options(df: pd.DataFrame) -> list:
+    """按出现频次返回数据中全部原因标签，供录入表单使用。"""
+    counts = {}
+    for value in df.get(COL_REASON, pd.Series(dtype=str)):
+        for reason in split_reasons(value):
+            counts[reason] = counts.get(reason, 0) + 1
+    return sorted(counts, key=lambda r: (-counts[r], r))
 
 
 def load_sample_data() -> pd.DataFrame:
-    """加载示例数据"""
+    """加载实际问卷数据（只读，不生成/覆盖 CSV）。
+
+    返回保留原始 7 列的数据框，并附加数值列 `睡眠小时数`；
+    三次压力指数与平均值统一转为 float，便于统计和绘图。
+    文件缺失时返回空数据框，由调用方给出提示。
+    """
     if not os.path.exists(SAMPLE_CSV):
-        save_sample_data()
-    return pd.read_csv(SAMPLE_CSV, encoding="utf-8-sig")
+        return pd.DataFrame(columns=[*RAW_COLUMNS, COL_SLEEP_HOURS])
+
+    df = pd.read_csv(SAMPLE_CSV, encoding="utf-8-sig")
+
+    missing = [c for c in RAW_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"{SAMPLE_CSV} 缺少字段：{', '.join(missing)}")
+
+    for col in [*INDEX_COLS, COL_AVG]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    # 平均值缺失时用三次压力指数的平均回填
+    df[COL_AVG] = df[COL_AVG].fillna(df[INDEX_COLS].mean(axis=1)).round(1)
+
+    df[COL_SLEEP_HOURS] = (
+        df[COL_SLEEP]
+        .astype(str)
+        .str.extract(r"(\d+(?:\.\d+)?)", expand=False)
+        .astype(float)
+    )
+    return df
 
 
 # 情绪日记工具

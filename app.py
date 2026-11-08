@@ -14,26 +14,26 @@ Streamlit 主应用（重构版）
 
 import time
 
-import numpy as np
-import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 from ai_companion import PROVIDERS, generate_companion
 from color_mapping import PRESSURE_COLOR_MAP, get_breath_animation_params
 from data_utils import (
+    COL_AVG,
+    COL_GENDER,
+    COL_SLEEP_HOURS,
+    INDEX_COLS,
+    RAW_COLUMNS,
     clear_diary,
     load_diary,
     load_sample_data,
+    reason_options,
     save_diary_entry,
     seed_sample_diary,
 )
 from dotenv import load_dotenv
 from music_library import search_url
-from pressure_model import (
-    calculate_pressure_score,
-    get_pressure_level,
-    quick_pressure_score,
-)
+from pressure_model import calculate_pressure_score, get_pressure_level
 from theme import get_theme, render_theme_style
 from ui import (
     PHYS_COLOR,
@@ -55,75 +55,69 @@ from ui import (
     subtitle,
 )
 from visualization import (
-    generate_sample_weekly_data,
-    plot_group_comparison,
-    plot_pressure_source_pie,
+    plot_compare_with_samples,
+    plot_gender_pressure,
+    plot_index_fluctuation,
     plot_pressure_trend,
     plot_pressure_wave,
-    plot_sankey,
+    plot_reason_distribution,
+    plot_sleep_vs_pressure,
 )
 
 load_dotenv()
 
+# 三次压力指数卡片沿用原有三色体系
+INDEX_COLORS = (STUDY_COLOR, PHYS_COLOR, SOCIAL_COLOR)
 
-# ============ 侧边栏：压力自测 ============
-def render_sidebar():
+
+# ============ 侧边栏：按实际数据字段录入 ============
+def render_sidebar(df):
     st.sidebar.title("🧪 压力测评")
-    test_mode = st.sidebar.radio(
-        "选择测评模式", ["快速测评（3题）", "详细测评（11题）"], index=0
+    st.sidebar.caption("字段与 `data/sample_data.csv` 保持一致")
+
+    if df.empty:
+        defaults = [50, 50, 50]
+        genders = ["female", "male"]
+    else:
+        defaults = [
+            min(100, max(0, int(round(df[col].mean())))) for col in INDEX_COLS
+        ]
+        genders = sorted(df[COL_GENDER].dropna().unique().tolist()) or [
+            "female",
+            "male",
+        ]
+
+    gender = st.sidebar.radio("性别", genders, horizontal=True, key="sb_gender")
+    sleep_hours = st.sidebar.slider(
+        "😴 睡眠时长（小时）", 0.0, 12.0, 7.0, 0.5, key="sb_sleep"
     )
 
-    if test_mode == "快速测评（3题）":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 快速压力测评")
-        sleep = st.sidebar.slider("😴 昨晚睡了几小时？", 0.0, 12.0, 8.0, 0.5)
-        mood = st.sidebar.slider("😊 当前心情（1-10分）", 1.0, 10.0, 5.0, 0.5)
-        stress = st.sidebar.slider("😰 当前压力感（1-10分）", 1.0, 10.0, 5.0, 0.5)
-        result = quick_pressure_score(sleep=sleep, mood=mood, stress=stress)
-    else:
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 详细压力测评")
+    st.sidebar.markdown("#### 📊 三次压力指数（0-100）")
+    indices = [
+        st.sidebar.slider(name, 0, 100, default, 1, key=f"sb_index_{i}")
+        for i, (name, default) in enumerate(zip(INDEX_COLS, defaults))
+    ]
+    reasons = st.sidebar.multiselect(
+        "🎯 情绪波动原因", reason_options(df), key="sb_reasons"
+    )
 
-        st.sidebar.markdown("#### 📚 学习压力")
-        homework = st.sidebar.slider("每天作业时长（小时）", 0.0, 5.0, 2.0, 0.5)
-        exam_freq = st.sidebar.slider("每周考试/测验次数", 0.0, 6.0, 2.0, 0.5)
-        grade_var = st.sidebar.slider("成绩波动程度（1-10）", 1.0, 10.0, 3.0, 0.5)
-        tutoring = st.sidebar.slider("课外辅导班数量", 0.0, 5.0, 3.0, 0.5)
-
-        st.sidebar.markdown("#### 💪 生理状态")
-        sleep_h = st.sidebar.slider("每天睡眠时长（小时）", 0.0, 12.0, 8.0, 0.5)
-        sleep_q = st.sidebar.slider("睡眠质量（1-10分）", 1.0, 10.0, 6.0, 0.5)
-        exercise = st.sidebar.slider("每周运动次数", 0.0, 7.0, 2.0, 0.5)
-
-        st.sidebar.markdown("#### 👥 社交反馈")
-        conflict = st.sidebar.slider("同伴冲突次数", 0.0, 5.0, 1.0, 0.5)
-        criticism = st.sidebar.slider("家长批评频率（1-5）", 1.0, 5.0, 2.0, 0.5)
-        social_media = st.sidebar.slider(
-            "社交媒体使用时长（小时/天）", 0.0, 8.0, 2.0, 0.5
-        )
-        loneliness = st.sidebar.slider("孤独感评分（1-10）", 1.0, 10.0, 3.0, 0.5)
-
-        result = calculate_pressure_score(
-            homework_hours=homework,
-            exam_frequency=exam_freq,
-            grade_variance=grade_var,
-            tutoring_count=tutoring,
-            sleep_hours=sleep_h,
-            sleep_quality=sleep_q,
-            exercise_freq=exercise,
-            conflict_count=conflict,
-            parent_criticism=criticism,
-            social_media_hours=social_media,
-            loneliness_score=loneliness,
-        )
-
+    result = calculate_pressure_score(*indices)
+    result.update({"gender": gender, "sleep_hours": sleep_hours, "reasons": reasons})
     score = result["total_score"]
     level_info = get_pressure_level(score)
+
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(
+        f"**综合压力指数：{score:.1f}** {level_info['emoji']} {level_info['level']}"
+    )
+    st.sidebar.caption(
+        f"三次波动幅度 {result['amplitude']:.1f} · 睡眠 {sleep_hours:g} 小时 · {gender}"
+    )
     return result, score, level_info
 
 
 # ============ Tab 1: 仪表盘 ============
-def render_dashboard(result, score, level_info, color, theme):
+def render_dashboard(result, score, color, theme, df):
     st.subheader("🧪 压力测评")
 
     # AI 情绪陪伴（解决方法）与欢迎页保持一致：此前 AI 已给出的分析/音乐/呼吸/冥想
@@ -133,145 +127,87 @@ def render_dashboard(result, score, level_info, color, theme):
         render_solution_section(companion, theme, with_gradient=False)
         st.markdown("---")
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(
-            card(
-                "学习压力",
-                result.get("study_pressure", "N/A"),
-                color,
-                theme,
-                STUDY_COLOR,
-            ),
-            unsafe_allow_html=True,
-        )
-    with col2:
-        st.markdown(
-            card(
-                "生理状态",
-                result.get("physical_state", "N/A"),
-                color,
-                theme,
-                PHYS_COLOR,
-            ),
-            unsafe_allow_html=True,
-        )
-    with col3:
-        st.markdown(
-            card(
-                "社交反馈",
-                result.get("social_feedback", "N/A"),
-                color,
-                theme,
-                SOCIAL_COLOR,
-            ),
-            unsafe_allow_html=True,
-        )
+    # 三次压力指数
+    for col, name, value, value_color in zip(
+        st.columns(3), INDEX_COLS, result["indices"], INDEX_COLORS
+    ):
+        with col:
+            st.markdown(
+                card(name, f"{value:.0f}", color, theme, value_color),
+                unsafe_allow_html=True,
+            )
 
-    # 压力波段曲线
-    st.markdown("#### 📈 一周压力波动")
-    weekly_data = generate_sample_weekly_data(score)
+    st.caption(
+        f"综合压力指数 {score:.1f}（三次平均） · 波动幅度 {result['amplitude']:.1f} · "
+        f"性别 {result['gender']} · 睡眠 {result['sleep_hours']:g} 小时"
+    )
+    reasons = result["reasons"]
+    st.markdown(
+        "**🎯 情绪波动原因：** "
+        + ("、".join(f"`{r}`" for r in reasons) if reasons else "未填写")
+    )
+
+    # 三次测量波动曲线（不再使用模拟的一周数据）
+    st.markdown("#### 📈 三次测量压力波动")
     st.plotly_chart(
-        plot_pressure_wave(weekly_data, color=color, theme=theme),
+        plot_pressure_wave(
+            result["indices"],
+            days=INDEX_COLS,
+            color=color,
+            theme=theme,
+            title="📊 三次测量压力波段曲线",
+            x_title="测量次序",
+        ),
         use_container_width=True,
     )
 
-    # 压力来源饼图
-    st.markdown("#### 🎯 压力来源分布")
-    study_val = result.get("study_pressure", 30)
-    phys_val = result.get("physical_state", 25)
-    social_val = result.get("social_feedback", 25)
+    # 与实际样本均值对比
+    st.markdown("#### 🎯 与样本数据对比")
     st.plotly_chart(
-        plot_pressure_source_pie(study_val, phys_val, social_val, theme=theme),
+        plot_compare_with_samples(result, df, theme=theme),
         use_container_width=True,
     )
 
 
 # ============ Tab 2: 数据分析 ============
-def _row_kwargs(row):
-    """把数据行转为 calculate_pressure_score 的关键字参数（去掉分组列）。"""
-    return {k: v for k, v in row.items() if k not in ("grade", "gender")}
-
-
-def _avg_group(group, scores):
-    return {
-        "group": group,
-        "study": np.mean([s["study_pressure"] for s in scores]),
-        "physical": np.mean([s["physical_state"] for s in scores]),
-        "social": np.mean([s["social_feedback"] for s in scores]),
-    }
-
-
-def render_analysis(theme):
+def render_analysis(df, theme):
     st.subheader("📊 群体数据分析")
 
-    df = load_sample_data()
-    st.markdown(f"当前使用 **模拟数据**（{len(df)} 位同学），可替换为实际问卷数据。")
+    if df.empty:
+        st.warning("未找到实际数据文件 `data/sample_data.csv`，请检查数据目录。")
+        return
 
-    # 群体对比
-    st.markdown("#### 不同年级压力对比")
-    group_data = []
-    for grade in ["初一", "初二", "初三"]:
-        subset = df[df["grade"] == grade]
-        scores = [
-            calculate_pressure_score(**_row_kwargs(row)) for _, row in subset.iterrows()
-        ]
-        if scores:
-            group_data.append(_avg_group(grade, scores))
-    group_df = pd.DataFrame(group_data)
-    st.plotly_chart(
-        plot_group_comparison(group_df, theme=theme), use_container_width=True
+    st.markdown(
+        f"当前使用 **实际问卷数据**（{len(df)} 位同学），来源：`data/sample_data.csv`。"
     )
 
-    # 性别对比
-    st.markdown("#### 不同性别压力对比")
-    gender_data = []
-    for gender in ["男", "女"]:
-        subset = df[df["gender"] == gender]
-        scores = [
-            calculate_pressure_score(**_row_kwargs(row)) for _, row in subset.iterrows()
-        ]
-        if scores:
-            gender_data.append(_avg_group(gender, scores))
-    gender_df = pd.DataFrame(gender_data)
-    st.plotly_chart(
-        plot_group_comparison(gender_df, theme=theme), use_container_width=True
-    )
+    # 概览指标
+    metrics = [
+        ("样本数", f"{len(df)}"),
+        ("平均压力指数", f"{df[COL_AVG].mean():.1f}"),
+        ("最高 / 最低", f"{df[COL_AVG].max():.0f} / {df[COL_AVG].min():.0f}"),
+        ("平均睡眠时长", f"{df[COL_SLEEP_HOURS].mean():.1f} 小时"),
+    ]
+    for col, (title, value) in zip(st.columns(4), metrics):
+        with col:
+            st.markdown(card(title, value, "#6FCFC4", theme), unsafe_allow_html=True)
 
-    # 桑基图
-    # st.markdown("#### 🔄 压力能量流向图")
-    # avg_study = np.mean(
-    #     [
-    #         calculate_pressure_score(**_row_kwargs(row))["study_pressure"]
-    #         for _, row in df.iterrows()
-    #     ]
-    # )
-    # avg_phys = np.mean(
-    #     [
-    #         calculate_pressure_score(**_row_kwargs(row))["physical_state"]
-    #         for _, row in df.iterrows()
-    #     ]
-    # )
-    # avg_social = np.mean(
-    #     [
-    #         calculate_pressure_score(**_row_kwargs(row))["social_feedback"]
-    #         for _, row in df.iterrows()
-    #     ]
-    # )
-    # st.plotly_chart(
-    #     plot_sankey(
-    #         avg_study,
-    #         avg_phys,
-    #         avg_social,
-    #         avg_study + avg_phys + avg_social,
-    #         theme=theme,
-    #     ),
-    #     use_container_width=True,
-    # )
+    st.markdown("#### 不同性别平均压力对比")
+    st.plotly_chart(plot_gender_pressure(df, theme=theme), use_container_width=True)
 
-    # 原始数据
+    st.markdown("#### 睡眠时长与压力指数关系")
+    st.plotly_chart(plot_sleep_vs_pressure(df, theme=theme), use_container_width=True)
+
+    st.markdown("#### 三次压力指数波动")
+    st.plotly_chart(plot_index_fluctuation(df, theme=theme), use_container_width=True)
+
+    st.markdown("#### 情绪波动原因分布")
+    st.plotly_chart(plot_reason_distribution(df, theme=theme), use_container_width=True)
+
+    # 原始数据（保持 CSV 中的原始值）
     with st.expander("📋 查看原始数据"):
-        st.dataframe(df.round(2), use_container_width=True)
+        st.dataframe(df[RAW_COLUMNS], use_container_width=True)
+        st.caption("字段：" + "、".join(RAW_COLUMNS))
 
 
 # ============ Tab 3: 情绪日记 ============
@@ -555,8 +491,11 @@ def main():
         render_welcome(theme)
         return
 
-    # 侧边栏自测
-    result, score, level_info = render_sidebar()
+    # 实际问卷数据（只读），供侧边栏默认值、仪表盘和数据分析共用
+    df = load_sample_data()
+
+    # 侧边栏自测（字段与 CSV 一致）
+    result, score, level_info = render_sidebar(df)
     color = level_info["color"]
 
     # 主标题 + 压力指数卡片
@@ -571,9 +510,9 @@ def main():
         ["🧪 压力测评", "📊 数据分析", "📖 情绪日记", "💡 减压推荐"]
     )
     with tab1:
-        render_dashboard(result, score, level_info, color, theme)
+        render_dashboard(result, score, color, theme, df)
     with tab2:
-        render_analysis(theme)
+        render_analysis(df, theme)
     with tab3:
         render_diary(score, theme)
     with tab4:

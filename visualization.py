@@ -12,6 +12,14 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+from data_utils import (
+    COL_AVG,
+    COL_GENDER,
+    COL_REASON,
+    COL_SLEEP_HOURS,
+    INDEX_COLS,
+    split_reasons,
+)
 from theme import DARK, Theme
 
 # 设置中文字体
@@ -71,10 +79,12 @@ def plot_pressure_wave(
     days: list = None,
     color: str = "#E8928C",
     theme: Theme = DARK,
+    title: str = "📊 压力波段曲线",
+    x_title: str = "测量次序",
 ):
-    """生成压力波段曲线图（Plotly）。"""
+    """生成压力波段曲线图（Plotly），可复用于一周数据或三次测量。"""
     if days is None:
-        days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        days = ["第1次", "第2次", "第3次"]
 
     fig = go.Figure()
     fig.add_trace(
@@ -94,11 +104,9 @@ def plot_pressure_wave(
     )
 
     fig.update_layout(
-        title=dict(
-            text="📊 一周压力波段曲线", font=dict(size=18), x=0.5, xanchor="center"
-        ),
+        title=dict(text=title, font=dict(size=18), x=0.5, xanchor="center"),
         title_x=0.5,
-        xaxis=dict(title="日期", tickmode="array", tickvals=days),
+        xaxis=dict(title=x_title, tickmode="array", tickvals=days),
         yaxis=dict(title="压力指数", range=[0, 105]),
         shapes=[
             dict(
@@ -320,10 +328,199 @@ def plot_pressure_trend(diary_data: list, theme: Theme = DARK):
     return apply_plotly_theme(fig, theme)
 
 
-def generate_sample_weekly_data(base_score: float = 50) -> list:
-    """根据基准压力分生成一周模拟数据。"""
-    np.random.seed(42)
-    # 模拟典型中学生一周：周一低，逐渐升高，周五高峰，周末回落
-    pattern = [0.85, 0.95, 1.0, 1.1, 1.2, 0.65, 0.55]
-    values = [round(base_score * p + np.random.normal(0, 5), 1) for p in pattern]
-    return [min(100, max(0, v)) for v in values]
+# ============ 实际问卷数据图表 ============
+_PALETTE = ["#E8928C", "#6FCFC4", "#E0C068", "#B18BC9"]
+
+
+def plot_gender_pressure(df: pd.DataFrame, theme: Theme = DARK):
+    """按性别统计平均压力指数（标注各组样本数）。"""
+    grouped = (
+        df.groupby(COL_GENDER, dropna=True)[COL_AVG]
+        .agg(["mean", "count"])
+        .reset_index()
+    )
+    fig = go.Figure(
+        go.Bar(
+            x=grouped[COL_GENDER],
+            y=grouped["mean"].round(1),
+            marker_color=[_PALETTE[i % len(_PALETTE)] for i in range(len(grouped))],
+            text=[
+                f"{v:.1f}（n={int(n)}）"
+                for v, n in zip(grouped["mean"], grouped["count"])
+            ],
+            textposition="outside",
+            hovertemplate="性别: %{x}<br>平均压力指数: %{y:.1f}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title=dict(text="📊 不同性别平均压力对比", font=dict(size=18)),
+        xaxis=dict(title="性别"),
+        yaxis=dict(title="平均压力指数", range=[0, 100]),
+        height=400,
+    )
+    return apply_plotly_theme(fig, theme)
+
+
+def plot_sleep_vs_pressure(df: pd.DataFrame, theme: Theme = DARK):
+    """睡眠时长与平均压力指数散点图（按性别着色，叠加线性趋势线）。"""
+    fig = go.Figure()
+    gender_colors = {"female": "#E8928C", "male": "#6FCFC4"}
+    for gender, subset in df.groupby(COL_GENDER, dropna=True):
+        label = str(gender)
+        fig.add_trace(
+            go.Scatter(
+                x=subset[COL_SLEEP_HOURS],
+                y=subset[COL_AVG],
+                mode="markers",
+                name=label,
+                marker=dict(
+                    size=11,
+                    color=gender_colors.get(label, "#E0C068"),
+                    opacity=0.85,
+                    line=dict(width=1, color=theme.text),
+                ),
+                hovertemplate=(
+                    f"性别: {label}<br>睡眠: %{{x:.1f}} 小时"
+                    "<br>平均压力指数: %{y:.1f}<extra></extra>"
+                ),
+            )
+        )
+
+    valid = df[[COL_SLEEP_HOURS, COL_AVG]].dropna()
+    if len(valid) >= 2 and valid[COL_SLEEP_HOURS].nunique() > 1:
+        slope, intercept = np.polyfit(valid[COL_SLEEP_HOURS], valid[COL_AVG], 1)
+        xs = np.linspace(
+            valid[COL_SLEEP_HOURS].min(), valid[COL_SLEEP_HOURS].max(), 50
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=xs,
+                y=slope * xs + intercept,
+                mode="lines",
+                name="整体趋势",
+                line=dict(color="#E0C068", width=2, dash="dash"),
+                hovertemplate="睡眠: %{x:.1f} 小时<br>趋势值: %{y:.1f}<extra></extra>",
+            )
+        )
+
+    fig.update_layout(
+        title=dict(text="😴 睡眠时长与压力指数关系", font=dict(size=18)),
+        xaxis=dict(title="睡眠时长（小时）"),
+        yaxis=dict(title="平均压力指数", range=[0, 100]),
+        height=420,
+    )
+    return apply_plotly_theme(fig, theme)
+
+
+def plot_index_fluctuation(df: pd.DataFrame, theme: Theme = DARK):
+    """三次压力指数波动：每位样本一条淡线，叠加全体均值曲线。"""
+    fig = go.Figure()
+    for _, row in df.iterrows():
+        values = [row[c] for c in INDEX_COLS]
+        if any(pd.isna(v) for v in values):
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=INDEX_COLS,
+                y=values,
+                mode="lines+markers",
+                line=dict(color="rgba(232,146,140,0.25)", width=1.5),
+                marker=dict(size=4, color="rgba(232,146,140,0.35)"),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+
+    means = [df[c].mean() for c in INDEX_COLS]
+    fig.add_trace(
+        go.Scatter(
+            x=INDEX_COLS,
+            y=means,
+            mode="lines+markers+text",
+            line=dict(color="#6FCFC4", width=4),
+            marker=dict(size=12, color="#6FCFC4"),
+            text=[f"{v:.1f}" for v in means],
+            textposition="top center",
+            name="全体均值",
+            hovertemplate="%{x}<br>全体均值: %{y:.1f}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title=dict(text="📈 三次压力指数波动", font=dict(size=18)),
+        xaxis=dict(title="测量次序", tickmode="array", tickvals=INDEX_COLS),
+        yaxis=dict(title="压力指数", range=[0, 105]),
+        height=420,
+    )
+    return apply_plotly_theme(fig, theme)
+
+
+def plot_reason_distribution(df: pd.DataFrame, theme: Theme = DARK):
+    """情绪波动原因分布：拆分逗号分隔的多标签后按出现次数统计。"""
+    counts = {}
+    for value in df.get(COL_REASON, pd.Series(dtype=str)):
+        for reason in split_reasons(value):
+            counts[reason] = counts.get(reason, 0) + 1
+
+    items = sorted(counts.items(), key=lambda kv: kv[1])
+    fig = go.Figure(
+        go.Bar(
+            x=[c for _, c in items],
+            y=[r for r, _ in items],
+            orientation="h",
+            marker_color="#E0C068",
+            text=[c for _, c in items],
+            textposition="outside",
+            hovertemplate="%{y}<br>出现次数: %{x}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title=dict(text="🎯 情绪波动原因分布", font=dict(size=18)),
+        xaxis=dict(
+            title="出现次数（一条记录可含多个原因）",
+            range=[0, max(counts.values()) * 1.2 if counts else 1],
+        ),
+        yaxis=dict(title="原因标签"),
+        height=420,
+    )
+    return apply_plotly_theme(fig, theme)
+
+
+def plot_compare_with_samples(result: dict, df: pd.DataFrame, theme: Theme = DARK):
+    """个人三次压力指数与综合值 vs 全体样本均值。"""
+    labels = [*INDEX_COLS, "综合平均"]
+    my_values = [*result["indices"], result["total_score"]]
+    sample_values = (
+        [df[c].mean() for c in INDEX_COLS] + [df[COL_AVG].mean()]
+        if not df.empty
+        else []
+    )
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            name="你的测评",
+            x=labels,
+            y=[round(v, 1) for v in my_values],
+            marker_color="#E8928C",
+            text=[f"{v:.1f}" for v in my_values],
+            textposition="outside",
+        )
+    )
+    if sample_values:
+        fig.add_trace(
+            go.Bar(
+                name="样本均值",
+                x=labels,
+                y=[round(v, 1) for v in sample_values],
+                marker_color="#6FCFC4",
+                text=[f"{v:.1f}" for v in sample_values],
+                textposition="outside",
+            )
+        )
+    fig.update_layout(
+        barmode="group",
+        title=dict(text="🎯 你的压力指数 vs 样本均值", font=dict(size=18)),
+        yaxis=dict(title="压力指数", range=[0, 105]),
+        height=400,
+    )
+    return apply_plotly_theme(fig, theme)
